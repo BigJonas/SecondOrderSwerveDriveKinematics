@@ -47,7 +47,21 @@ public class SO_SwerveDriveKinematics {
 
         mPreviousCenterOfRotation = new Translation2d();
 
-        resetInverseKinematics();
+        for (int i = 0; i < mModuleNum; i++) {
+            mInverseKinematics.setRow(i * 2 + 0, 0, 
+                1, 0, -mModules[i].getY()
+            );
+            mInverseKinematics.setRow(i * 2 + 1, 0, 
+                0, 1, +mModules[i].getX()
+            );
+
+            mInverseKinematicsPrime.setRow(i * 2 + 0, 0,
+                1, 0, -mModules[i].getX(), -mModules[i].getY() 
+            );
+            mInverseKinematicsPrime.setRow(i * 2 + 1, 0,
+                0, 1, -mModules[i].getY(), +mModules[i].getX()
+            );
+        }
 
         mForwardKinematics = mInverseKinematics.pseudoInverse();
         mForwardKinematicsPrime = mInverseKinematicsPrime.pseudoInverse();
@@ -59,14 +73,14 @@ public class SO_SwerveDriveKinematics {
      * @param centerOfRotation Point at which the robot will rotate around
      * @return
      */
-    public SO_SwerveModuleState[] toModuleStates(SO_ChassisSpeeds speeds, Translation2d centerOfRotation) {
+    public SO_SwerveModuleState[] toSwerveModuleStates(SO_ChassisSpeeds speeds, Translation2d centerOfRotation) {
         // Returns empty module states if speeds are zero
         if (speeds.vxMetersPerSecond == 0.0
             && speeds.vyMetersPerSecond == 0.0
             && speeds.omegaRadiansPerSecond == 0.0) {
             SO_SwerveModuleState[] newStates = new SO_SwerveModuleState[mModuleNum];
             for (int i = 0; i < mModuleNum; i++) {
-                newStates[i] = new SO_SwerveModuleState(0.0, 0.0, mModuleStates[i].anglePos, Rotation2d.fromDegrees(0));
+                newStates[i] = new SO_SwerveModuleState(0.0, 0.0, mModuleStates[i].angle, Rotation2d.fromDegrees(0));
             }
 
             mModuleStates = newStates;
@@ -75,8 +89,22 @@ public class SO_SwerveDriveKinematics {
 
         // Limit computing robot reference vectors until center of rotation changes
         if (!mPreviousCenterOfRotation.equals(centerOfRotation)) {
+            for (int i = 0; i < mModuleNum; i++) {
+                mInverseKinematics.setRow(i * 2 + 0, 0, 
+                    1, 0, -mModules[i].getY() + centerOfRotation.getY()
+                );
+                mInverseKinematics.setRow(i * 2 + 1, 0, 
+                    0, 1, +mModules[i].getX() - centerOfRotation.getX()
+                );
+    
+                mInverseKinematicsPrime.setRow(i * 2 + 0, 0,
+                    1, 0, -mModules[i].getX() + centerOfRotation.getX(), -mModules[i].getY() + centerOfRotation.getY() 
+                );
+                mInverseKinematicsPrime.setRow(i * 2 + 1, 0,
+                    0, 1, -mModules[i].getY() + centerOfRotation.getY(), +mModules[i].getX() - centerOfRotation.getX()
+                );
+            }
             mPreviousCenterOfRotation = centerOfRotation;
-            resetInverseKinematics();
         }
 
         // First order ChassisSpeeds
@@ -89,10 +117,10 @@ public class SO_SwerveDriveKinematics {
         // Second order ChassisSpeeds
         SimpleMatrix chassisAccelMatrix_aPlusAlpha = new SimpleMatrix(4, 1);
         chassisAccelMatrix_aPlusAlpha.setColumn(0, 0,
-            speeds.axMetersPerSecondSquard,
-            speeds.ayMetersPerSecondSquard,
+            speeds.axMetersPerSecondSquared,
+            speeds.ayMetersPerSecondSquared,
             Math.pow(speeds.omegaRadiansPerSecond, 2),
-            speeds.alphaRadiansPerSecond
+            speeds.alphaRadiansPerSecondSquared
         );
 
         // First order kinematics
@@ -108,10 +136,12 @@ public class SO_SwerveDriveKinematics {
             double vy = moduleStateMatrix_vm.get(i * 2 + 1, 0);
             double ax = moduleStateMatrix_am.get(i * 2 + 0, 0);
             double ay = moduleStateMatrix_am.get(i * 2 + 1, 0);
+            // System.out.println("x " + ax +", y " + ay);
 
             // Converts Velocity components into Angle heading and Linear Velocity
             double velocity = Math.hypot(vx, vy);
             Rotation2d heading = new Rotation2d(vx, vy);
+            // System.out.println(heading);
 
             // Converts Acceleration components into Angular velocity and Liner Acceleration
             SimpleMatrix headingMatrix = new SimpleMatrix(2, 2);
@@ -123,19 +153,28 @@ public class SO_SwerveDriveKinematics {
             );
             SimpleMatrix componentMatrix = new SimpleMatrix(2, 1);
             componentMatrix.setColumn(0, 0, 
-                ax, ay
+                ax, 
+                ay
             );
 
             SimpleMatrix moduleAccelerationMatrix = headingMatrix.mult(componentMatrix);
 
+            double accel = moduleAccelerationMatrix.get(0, 0);
+            Rotation2d angularVelocity = Rotation2d.fromRadians(moduleAccelerationMatrix.get(1, 0)).div(velocity);
+            // Takes care of when velocity is 0 and angular velocity becomes -Infinity
+            if (velocity == 0) angularVelocity = Rotation2d.fromDegrees(0.0); // Prolly not mathematically correct but idk
             // Passes calculated values into module states
-            mModuleStates[i].speedMetersPerSecond = velocity;
-            mModuleStates[i].anglePos = heading;
-            mModuleStates[i].accelMetersPerSecondSquard = moduleAccelerationMatrix.get(0, 0);
-            mModuleStates[i].angleVel = Rotation2d.fromRadians(moduleAccelerationMatrix.get(1, 0) / velocity);
+            mModuleStates[i] = new SO_SwerveModuleState(
+                velocity, accel, 
+                heading, angularVelocity
+            );
         }
 
         return mModuleStates;
+    }
+
+    public SO_SwerveModuleState[] toSwerveModuleStates(SO_ChassisSpeeds speeds) {
+        return toSwerveModuleStates(speeds, new Translation2d());
     }
 
     /**
@@ -154,25 +193,26 @@ public class SO_SwerveDriveKinematics {
         for (int i = 0; i < mModuleNum; i++) {
             SO_SwerveModuleState module = moduleStates[i];
             // Easily grab velocity components of the module
-            moduleStateVelMatrix.set(i * 2 + 0, module.speedMetersPerSecond * module.anglePos.getCos());
-            moduleStateVelMatrix.set(i * 2 + 0, module.speedMetersPerSecond * module.anglePos.getSin());
+            moduleStateVelMatrix.set(i * 2 + 0, module.speedMetersPerSecond * module.angle.getCos());
+            moduleStateVelMatrix.set(i * 2 + 1, module.speedMetersPerSecond * module.angle.getSin());
 
-            // Matrix multiplication for acceleration components of the module
+            // Matrix multiplication for acceleration components of the module 
             SimpleMatrix headingMatrix = new SimpleMatrix(2, 2);
             headingMatrix.setRow(0, 0,
-                +module.anglePos.getCos(), -module.anglePos.getSin()
+                +module.angle.getCos(), -module.angle.getSin()
             );
-            headingMatrix.setRow(0, 0, 
-                +module.anglePos.getSin(), +module.anglePos.getCos()
+            headingMatrix.setRow(1, 0, 
+                +module.angle.getSin(), +module.angle.getCos()
             );
             SimpleMatrix linearAccelMatrix = new SimpleMatrix(2, 1);
             linearAccelMatrix.setColumn(0, 0, 
-                module.accelMetersPerSecondSquard, module.speedMetersPerSecond * module.angleVel.getRadians()
+                module.accelMetersPerSecondSquared, 
+                module.speedMetersPerSecond * module.angleVel.getRadians()
             );
             SimpleMatrix componentAccelMatrix = headingMatrix.mult(linearAccelMatrix);
 
             moduleStateAccelMatrix.set(i * 2 + 0, componentAccelMatrix.get(0, 0));
-            moduleStateAccelMatrix.set(i * 2 + 0, componentAccelMatrix.get(1, 0));
+            moduleStateAccelMatrix.set(i * 2 + 1, componentAccelMatrix.get(1, 0));
         }
 
         // Inverses module components to chassis relative components
@@ -187,26 +227,5 @@ public class SO_SwerveDriveKinematics {
             chassisAccelVector.get(1, 0),
             chassisAccelVector.get(3, 0)
         );
-    }
-
-    /**
-     * Resets Inverse Kinematics
-     */
-    private void resetInverseKinematics() {
-        for (int i = 0; i < mModuleNum; i++) {
-            mInverseKinematics.setRow(i * 2 + 0, 0, 
-                1, 0, -mModules[i].getY() + mPreviousCenterOfRotation.getY()
-            );
-            mInverseKinematics.setRow(i * 2 + 1, 0, 
-                0, 1, +mModules[i].getX() - mPreviousCenterOfRotation.getX()
-            );
-
-            mInverseKinematicsPrime.setRow(i * 2 + 0, 0,
-                1, 0, -mModules[i].getX() + mPreviousCenterOfRotation.getX(), -mModules[i].getY() + mPreviousCenterOfRotation.getY() 
-            );
-            mInverseKinematicsPrime.setRow(i * 2 + 1, 0,
-                0, 1, -mModules[i].getY() + mPreviousCenterOfRotation.getY(), +mModules[i].getX() - mPreviousCenterOfRotation.getX()
-            );
-        }
     }
 }

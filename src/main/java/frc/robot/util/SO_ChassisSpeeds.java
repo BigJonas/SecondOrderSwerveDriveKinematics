@@ -5,38 +5,45 @@
 package frc.robot.util;
 
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 
 /**
  * Represents second order speeds of a robot chassis 
  * See ChassisSpeeds class for better documentation
  * {@link edu.wpi.first.math.kinematics.ChassisSpeeds}
  */
-public class SO_ChassisSpeeds {
-    public double vxMetersPerSecond;
-    public double vyMetersPerSecond;
-    public double omegaRadiansPerSecond;
-    public double axMetersPerSecondSquard;
-    public double ayMetersPerSecondSquard;
-    public double alphaRadiansPerSecond;
+public class SO_ChassisSpeeds extends ChassisSpeeds {
+    // Linear Acceleration in the x-axis
+    public double axMetersPerSecondSquared;
+    // Linear Acceleration in the y-axis
+    public double ayMetersPerSecondSquared;
+    // Angular Acceleration 
+    public double alphaRadiansPerSecondSquared;
 
     /**
      * Constructs a Second Order Chassis Speed object
      * @param vxMetersPerSecond Forward Velocity
      * @param vyMetersPerSecond Sideways Velocity
      * @param omegaRadiansPerSecond Angular Velocity
-     * @param axMetersPerSecondSquard Forward Acceleration
-     * @param ayMetersPerSecondSquard Sideways Acceleration
-     * @param alphaRadiansPerSecond Angular Acceleration
+     * @param axMetersPerSecondSquared Forward Acceleration
+     * @param ayMetersPerSecondSquared Sideways Acceleration
+     * @param alphaRadiansPerSecondSquared Angular Acceleration
      */
     public SO_ChassisSpeeds(
         double vxMetersPerSecond, double vyMetersPerSecond, double omegaRadiansPerSecond,
-        double axMetersPerSecondSquard, double ayMetersPerSecondSquard, double alphaRadiansPerSecond) {
-            this.vxMetersPerSecond = vxMetersPerSecond;
-            this.vyMetersPerSecond = vyMetersPerSecond;
-            this.omegaRadiansPerSecond = omegaRadiansPerSecond;
-            this.axMetersPerSecondSquard = axMetersPerSecondSquard;
-            this.ayMetersPerSecondSquard = ayMetersPerSecondSquard;
-            this.alphaRadiansPerSecond = alphaRadiansPerSecond;
+        double axMetersPerSecondSquared, double ayMetersPerSecondSquared, double alphaRadiansPerSecondSquared) {
+            super(vxMetersPerSecond, vyMetersPerSecond, omegaRadiansPerSecond);
+            this.axMetersPerSecondSquared = axMetersPerSecondSquared;
+            this.ayMetersPerSecondSquared = ayMetersPerSecondSquared;
+            this.alphaRadiansPerSecondSquared = alphaRadiansPerSecondSquared;
+    }
+
+    /**
+     * Returns the first order components of the ChassisSpeeds
+     * @return First order Chassis Speeds
+     */
+    public ChassisSpeeds asFirstOrder() {
+        return new ChassisSpeeds(vxMetersPerSecond, vyMetersPerSecond, omegaRadiansPerSecond);
     }
 
   /**
@@ -50,9 +57,16 @@ public class SO_ChassisSpeeds {
             +fieldRelativeSpeeds.vxMetersPerSecond * robotAngle.getCos() + fieldRelativeSpeeds.vyMetersPerSecond * robotAngle.getSin(),
             -fieldRelativeSpeeds.vyMetersPerSecond * robotAngle.getSin() + fieldRelativeSpeeds.vxMetersPerSecond * robotAngle.getCos(), 
             fieldRelativeSpeeds.omegaRadiansPerSecond, 
-            +fieldRelativeSpeeds.axMetersPerSecondSquard * robotAngle.getCos() + fieldRelativeSpeeds.vyMetersPerSecond * robotAngle.getSin(), 
-            -fieldRelativeSpeeds.ayMetersPerSecondSquard * robotAngle.getSin() + fieldRelativeSpeeds.vxMetersPerSecond * robotAngle.getCos(), 
-            fieldRelativeSpeeds.alphaRadiansPerSecond
+            +fieldRelativeSpeeds.axMetersPerSecondSquared * robotAngle.getCos() + fieldRelativeSpeeds.vyMetersPerSecond * robotAngle.getSin(), 
+            -fieldRelativeSpeeds.ayMetersPerSecondSquared * robotAngle.getSin() + fieldRelativeSpeeds.vxMetersPerSecond * robotAngle.getCos(), 
+            fieldRelativeSpeeds.alphaRadiansPerSecondSquared
         );
+    }
+
+    @Override
+    public String toString() {
+      return String.format(
+          "ChassisSpeeds(Vx: %.2f m/s, Vy: %.2f m/s, Omega: %.2f rad/s, Ax: %.2f m/s^2, Ay: %.2f m/s^2, Alpha: %.2f rad/s^2)",
+          vxMetersPerSecond, vyMetersPerSecond, omegaRadiansPerSecond, axMetersPerSecondSquared, ayMetersPerSecondSquared, alphaRadiansPerSecondSquared);
     }
 }
